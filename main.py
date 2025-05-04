@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from gates import stripe_charge, stripe_auth, shopify
 
 app = FastAPI()
-AUTH_KEY = "VDX-SHA2X-NZ0RS-O7HAM"
+AUTH_KEY = "BRY-FGKD5-MDYRI-56HDM"
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
