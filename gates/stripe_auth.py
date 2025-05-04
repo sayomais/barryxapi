@@ -63,7 +63,7 @@ def run(card, proxy_input=None):
         )
 
         if res.status_code == 200 and res.json().get("status") == "succeeded":
-            return {"status": "approved", "message": "Charged Successfully ✅"}
+            return {"status": "Approved", "message": "Card Added ✅"}
 
         if "next_action" in res.json():
             return {"status": "3ds", "message": "3D Secure Required ⚠️"}
