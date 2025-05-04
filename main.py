@@ -1,11 +1,9 @@
-
-from fastapi import FastAPI, Request, Header, HTTPException
+from fastapi import FastAPI, Request, Header
 from fastapi.responses import JSONResponse
-import stripe_charge, stripe_auth
-import shopify
+from gates import stripe_charge, stripe_auth, shopify
 
 app = FastAPI()
-AUTH_KEY = "BRY-FHJS2-CZGKR-67MYU"
+AUTH_KEY = "VDX-SHA2X-NZ0RS-O7HAM"
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
